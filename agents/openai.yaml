@@ -1,0 +1,4 @@
+interface:
+  display_name: "Báo cáo vĩ mô VN hàng tháng"
+  short_description: "Báo cáo vĩ mô toàn diện 41 chỉ số từ 5 nguồn (NSO/Customs/PMI/VBMA/VNBA)"
+  default_prompt: "Làm báo cáo vĩ mô VN cho tháng [MM]/[YYYY]"

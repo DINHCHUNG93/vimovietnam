@@ -1,0 +1,12 @@
+# Output báo cáo (tạo khi chạy skill, không commit)
+*-monthly/20*/
+*-monthly/history.json
+sources_cache/*.pdf
+sources_cache/*.html
+sources_cache/*.txt
+*.log
+.DS_Store
+
+# Vercel
+.vercel/
+node_modules/
