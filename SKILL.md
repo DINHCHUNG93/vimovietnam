@@ -13,6 +13,30 @@ Không phụ thuộc skill khác (data từ 5 nguồn web chính thức). Nhưng
 - `vn-news-digest` — thời sự 30 ngày cho cổ phiếu cụ thể
 - `vn-research-dashboard` — equity research (vĩ mô = context cho định giá cổ phiếu)
 
+
+## `--quick` flag (v1.1 fix premortem — target audience-aware)
+
+**Mặc định**: full pipeline (41 chỉ số, 5 tab, narrative đầy đủ).
+**`--quick`**: top 10 chỉ số quan trọng nhất + verdict 1 câu, skip narrative + enrich.
+
+```bash
+/vn-macro-monthly 2026-05 --quick
+# → Chỉ extract: CPI, PMI, IIP, XNK, FDI, LNH, tỷ giá, TPCP 10Y, tín dụng, vàng
+# → Skip: news enrichment, cross-card synthesis, 31 chỉ số phụ
+# → Output: 1 tab dashboard, ~10 cards, verdict 1 câu
+# → Thời gian: ~15 phút (vs 30-40 phút full)
+```
+
+**Khi nào dùng `--quick`**:
+- Trader/investor cần update vĩ mô nhanh
+- First pass trước khi chạy full
+- Downstream consumption (AI feed JSON)
+
+**Khi nào dùng full (mặc định)**:
+- Analyst cần depth
+- Publish công khai
+- Monthly report chính thức
+
 ## Workflow 4 bước
 
 ### Bước 1: Kiểm tra toàn vẹn (pre-flight) — tất cả hoặc không gì cả (BẮT BUỘC)
@@ -32,7 +56,12 @@ WebSearch check 5 nguồn:
 5/5? → Bước 2  |  thiếu? → DỪNG + đề xuất ngày thử lại
 ```
 
-→ **KHÔNG tạo thư mục** khi bị DỪNG (máy sạch). Xem `references/preflight_check.md` cho lịch release + gợi ý thử lại.
+→ **KHÔNG tạo thư mục** khi bị DỪNG (máy sạch). Xem `references/preflight_check.md` + bảng expected release dates bên dưới.
+### Bước 2: Fetch**Direct URL fallback** (thay chỉ WebSearch):
+- NSO: check `nso.gov.vn` latest news page trực tiếp
+- Customs: check `customs.gov.vn` trang tin tức
+- Nếu WebSearch miss nhưng URL trực tiếp có → override preflight
+
 
 ### Bước 1.5: Partial run workflow (khi user override all-or-nothing)
 
@@ -74,9 +103,41 @@ curl -sL "https://vbma.org.vn/storage/reports/May2026/25052026-29052026%20%20BAO
 pdftotext -layout sources_cache/vbma_weekly_25-29may_2026.pdf sources_cache/vbma_weekly_25-29may_2026.txt
 
 # VNBA: WebSearch trang tin → lấy CDN link → curl + pdftotext
+
+#### Customs data quality flag (v1.1 fix premortem)
+
+Customs khó fetch trực tiếp → dùng nguồn thứ cấp (VnEconomy, Báo CP). **BẮT BUỘC flag**:
+
+```json
+{
+  "xnk_export": {
+    "value": 33.5,
+    "source_primary": "Customs (via VnEconomy)",
+    "source_quality": "MEDQ",
+    "source_note": "Số từ nguồn thứ cấp — chưa verify với Customs gốc. Có thể sai số ±0.5%"
+  }
+}
+```
+
+**Nếu sau đó verify được với Customs gốc** → upgrade source_quality lên HIGHQ.
+
 ```
 
 → Xem `references/sources_overview.md` cho URL pattern + cách fetch từng nguồn.
+#### VBMA snapshot bias flag (v1.1 fix premortem)
+
+VBMA chỉ có weekly → dùng tuần cuối tháng proxy cho monthly. **Flag rõ**:
+
+```json
+{
+  "lnh_overnight": {
+    "value": 4.26,
+    "source_primary": "VBMA",
+    "source_note": "VBMA = tuần cuối tháng (snapshot). KHÔNG đại diện cả tháng — LNH có thể spike cuối tháng."
+  }
+}
+```
+
 
 ### Bước 3: Extract 41 chỉ số + apply 4 rules
 
@@ -218,6 +279,47 @@ Tạo data card  (xử lý bình thường)  BỎ QUA — KHÔNG tạo card
 - ❌ KHÔNG ghi `missing_files` (file thiếu) — vi phạm Nguyên tắc không placeholder. Khi nguồn bổ sung publish → chạy lại skill → tự thêm vào sources_files
 - ❌ KHÔNG ghi file mà không có chỉ số nào trace được tới nó
 
+
+
+### Bước 3.9: Cross-card synthesis — "Câu chuyện tháng" (BẮT BUỘC — v1.1 fix premortem)
+
+Sau khi data + narrative từng card xong, viết **1 section tổng hợp cuối** (~500 từ) kết nối các chỉ số quan trọng thành câu chuyện xuyên suốt.
+
+**Yêu cầu:**
+- Đặt trong `key_takeaways` section hoặc section riêng "Câu chuyện tháng"
+- Kết nối tối thiểu 5 cặp chỉ số (vd: CPI + PMI chi phí → lạm phát chi phí; FDI + XNK → cán cân ngoại thương; LNH + tỷ giá → chính sách tiền tệ)
+- Vẫn tuân thủ "4 ĐỪNG" (không dự báo, không khuyên, không cảm tính, không kết luận định hướng)
+- Mở câu hỏi cho người đọc tự suy luận
+
+**Ví dụ synthesis đúng:**
+> "CPI YoY 5.60% vượt target 4.5% tháng thứ 2 liên tiếp, cùng lúc PMI Chi phí đạt đỉnh 15 năm và nhập siêu 13.8 tỷ — ba con số cùng kể câu chuyện áp lực giá nguyên liệu. FDI +9.6% cho thấy vốn vẫn đến, nhưng vốn đến mua nguyên liệu nhập (nhập siêu) chứ chưa tạo xuất siêu. Cùng lúc, LNH ON giảm 255 đcb nhưng LSTP 10Y tăng — tín hiệu phân kỳ giữa ngắn hạn và dài hạn."
+
+**Tại sao cần**: 41 card rời rạc = nhà đầu tư phải tự liên kết. Cross-card synthesis giúp thấy "bức tranh tổng thể" mà vẫn trung thực.
+
+### Bước 3.8: Data Verification độc lập (BẮT BUỘC — v1.1 fix premortem)
+
+**Tính chính xác là sống còn.** Sau khi extract 41 chỉ số, BẮT BUỘC chạy verify độc lập — re-parse các file `.txt`/`.html` nguồn và đối chiếu từng số trong `report.json`:
+
+```bash
+python3 scripts/verify_data.py \
+  --report report.json \
+  --cache sources_cache/ \
+  [--strict]  # threshold 0.1% thay vì 0.5%
+```
+
+**Script `verify_data.py` PHẢI:**
+- Re-parse độc lập (KHÔNG import parsers chung với extract)
+- Đối chiếu từng số trong report.json vs source gốc
+- Tolerance: ±0.01% cho percent, ±50 cho số tiền
+- **FAIL** nếu bất kỳ số nào lệch > 0.5% hoặc bịa đặt
+- **FAIL** nếu số trong report không trace được tới file source
+
+**Verdict**:
+- `✅ VERIFICATION PASSED` → tiếp tục Bước 4
+- `❌ VERIFICATION FAILED` → fix parser, re-extract, re-verify. **KHÔNG BAO GIỜ render khi verify fail.**
+
+→ Pattern học từ `vn-rates-weekly` Bước 3.5 (verify_data.py đã chứng minh giá trị).
+
 ### Bước 4: Render HTML dashboard
 
 Copy `assets/report_template.html` → fill data từ `report.json`. Template có:
@@ -297,11 +399,21 @@ Kết quả: `✅ PASS` → done | `⚠️ WARNINGS` → review | `❌ FAIL` →
 }
 ```
 
-**Rules history**:
+**Rules history (v1.1 — audit trail)**:
 - Mỗi lần skill chạy thành công → append entry
-- **Re-run tháng cũ → ghi đè** (1 tháng = 1 giá trị)
-- **Bắt đầu trống** (KHÔNG seed data cũ). Áp dụng cho CẢ `history.json` thật VÀ template sample (`assets/report_template.html`)
-- → Dashboard demo sẽ không có nút `[📊]` cho đến khi skill chạy thật 6+ kỳ (feature ngủ chờ data — KHÔNG phải bug, xem "Pitfalls" cuối file)
+- **Re-run tháng cũ → ghi đè** (1 tháng = 1 giá trị) — NHƯNG giữ audit trail:
+  ```json
+  {
+    "month": "2026-05",
+    "value": 5.60,
+    "value_previous": 5.40,
+    "revised_at": "2026-07-10",
+    "revision_reason": "NSO revised CPI after initial release"
+  }
+  ```
+  Nếu `value != value_previous` → flag "revised" trong dashboard
+- **Bắt đầu trống** (KHÔNG seed data cũ)
+- → Dashboard demo sẽ không có nút `[📊]` cho đến khi skill chạy thật 6+ kỳ
 - Đủ 6+ tháng → chart Cấp A render sparkline đẹp
 
 ## 4 Rules — tóm tắt (xem `references/core_rules.md` cho chi tiết)
