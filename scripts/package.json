@@ -1,0 +1,12 @@
+{
+  "name": "vn-macro-monthly-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright runtime cho QA dashboard vn-macro-monthly",
+  "scripts": {
+    "qa": "node qa_report.js"
+  },
+  "devDependencies": {
+    "playwright": "1.57.0"
+  }
+}
