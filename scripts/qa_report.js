@@ -56,6 +56,8 @@ async function runQA() {
     return n + ((h.neg && h.neg.length ? 1 : 0) + (h.pos && h.pos.length ? 1 : 0)); // đếm KHUNG hiển thị
   }, 0) : null;
   const partialRun = !!(R && R._sources_coverage && R._sources_coverage.user_override);
+  // Editorial: news chỉ tồn tại trong schema card cũ — JSON không khai báo card nào thì bỏ qua check
+  const hasLegacyCards = !!(R && R.groups.some(g => (g.cards || []).length > 0));
 
   console.log(`🔍 QA Macro Monthly — Testing: ${url}`);
   console.log(`📁 Output: ${outputDir}`);
@@ -168,6 +170,7 @@ async function runQA() {
   else warnings.push('Không có lead editorial cũng không có narrative (thiếu phần kể chuyện)');
   if (newsItems > 0) passes.push(`News enrichment: ${newsItems} tin embed ✓`);
   else if (partialRun) passes.push('News: 0 tin (partial run — bỏ qua enrich đúng spec) ✓');
+  else if (!hasLegacyCards) passes.push('News: 0 tin (editorial — news thuộc schema card cũ, không áp dụng) ✓');
   else warnings.push('News enrichment: 0 tin (full run — nên có)');
 
   // === CHECK 5b: Special insights (so với JSON — không ép ≥5) ===
