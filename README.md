@@ -7,56 +7,48 @@
 
 # 📊 vn-macro-monthly — Báo cáo vĩ mô Việt Nam hàng tháng
 
-Skill tạo **báo cáo vĩ mô VN monthly** toàn diện 41 chỉ số từ 5 nguồn chính thức (NSO + Customs + S&P PMI + VBMA + VNBA). Bao phủ 4 trụ cột: sản xuất + ngoại thương + tiền tệ + tài chính.
+Skill tạo **bản tin phân tích vĩ mô VN hàng tháng** (macro briefing) từ 5 nguồn chính thức (NSO + Customs + S&P PMI + VBMA + VNBA). Triết lý: **bản tin, không phải dashboard** — mỗi nhóm = đoạn dẫn kể chuyện (text) + biểu đồ minh họa (graph) + dòng dữ liệu; mọi thứ do dữ liệu (report.json) quyết định, không có khung cố định ép nội dung.
 
-## Cấu trúc skill
+## Kiến trúc hiện tại (data-driven)
 
 ```
 vn-macro-monthly/
-├── SKILL.md                      # Workflow chính (pre-flight → fetch → extract → render)
-├── README.md                     # File này
-├── references/
-│   ├── core_rules.md             # 4 rules: Time / Frequency / Conflict / Unit
-│   ├── sources_overview.md       # 5 nguồn: URL pattern + cách fetch
-│   ├── preflight_check.md        # Kiểm tra toàn vẹn + lịch release + user override
-│   ├── data_cards.md             # Schema data card + 41 chỉ số + narrative rule
-│   ├── rendering.md              # HTML design pattern + 5 tab + placement rule
-│   ├── news_sources.md           # Nguồn báo chí enrich (3 nhóm)
-│   └── images.md                 # Ảnh minh họa stock (Unsplash)
+├── SKILL.md                      # Workflow (pre-flight → fetch → extract → verify → render → QA)
+├── references/                   # core_rules · sources_overview · preflight_check · data_cards · rendering · news_sources
 ├── assets/
-│   └── report_template.html      # Template HTML dashboard (Chart.js + CSS fintech)
-├── scripts/
-│   └── qa_report.js              # Automated QA (Playwright)
-└── agents/
-    └── openai.yaml               # OpenAI agent interface
+│   ├── skin.css                  # GIAO DIỆN (chỉ sửa khi đổi thiết kế)
+│   └── skin.js                   # JS (sparkline · gauge · arrows · modal · offline guard)
+└── scripts/
+    ├── render.js                 # MÁY RENDER: report.json + history.json → report.html
+    ├── verify_data.js            # MÁY KIỂM TRA: provenance · bounds · history · coverage · độ dài chữ
+    ├── qa_report.js              # QA Playwright (data-driven, đọc report.json để đối chiếu)
+    ├── run_monthly.js            # Pipeline 1 lệnh: verify → render → QA
+    └── package.json              # Playwright cho QA
 ```
 
-## Workflow 4 bước
+## Pipeline chuẩn mỗi tháng
 
-1. **Pre-flight** — kiểm tra 5 nguồn có sẵn chưa (all-or-nothing, hoặc user override partial)
-2. **Fetch + cache** — tải 5 nguồn về `sources_cache/`
-3. **Extract** — parse → 41 data cards + apply 4 rules + narrative
-4. **Render** — HTML dashboard 5 tab (Kinh tế thực / Tiền tệ / Ngành / Bối cảnh / Tổng hợp)
+```bash
+# 1. AI viết report.json (sau khi tải cache 5 nguồn)
+# 2. Kiểm tra dữ liệu (BẮT BUỘC — bắt lỗi bịa số, sai đơn vị, over text)
+node scripts/verify_data.js --json=2026-07/report.json --history=history.json
+# 3. Sinh báo cáo + QA
+node scripts/render.js --json=2026-07/report.json --history=history.json --out=2026-07/report.html
+```
 
-## Đặc trưng
+## Đặc điểm chính
 
-- **5 nguồn chính thức miễn phí**: NSO, Tổng cục Hải quan, S&P Global PMI, VBMA, VNBA
-- **4 rules chất lượng**: Time Consistency, Frequency (monthly-only), Conflict Resolution, Unit Convention
-- **Dashboard đồng style**: fintech dark theme, 5 tab nav, click-to-chart (ngủ chờ <6 tháng data)
-- **Nguyên tắc không placeholder**: chỉ tạo card khi có data thật
-- **Narrative "người kể chuyện số liệu"**: KHÔNG cho ý kiến, chỉ kể diễn biến số
+- **Bản tin phân tích, không phải dashboard**: mỗi nhóm = đoạn dẫn kể chuyện (lead) + 1 biểu đồ SVG minh họa + 3-5 dòng dữ liệu text
+- **Nhóm/tab động**: tháng thiếu nguồn → nhóm tự biến mất, không placeholder
+- **Biểu đồ SVG vẽ tĩnh ngay trong file**: in/PDF/offline đều hiện; bar vẽ từ số tháng, line tự nạp history (đủ 2 kỳ mới hiện)
+- **Bề rộng đọc chuẩn báo chí** (~1120px): chữ không trải cả màn hình
+- **Offline-first**: không phụ thuộc ảnh ngoài; mất mạng vẫn chạy bình thường
+- **Máy kiểm soát 3 lớp**: verify_data (số liệu + độ dài chữ) · render (cấu trúc) · QA (giao diện)
+- **Chuẩn độ dài có máy bắt**: lead ≤130 từ + ≥2 con số, note ≤22 từ + ≥1 số so sánh — hết over text
 
 ## Sử dụng
 
-Skill này hoạt động trong môi trường có thể fetch web (WebSearch, WebReader, curl, pdftotext). Kích hoạt:
-
-```
-/vn-macro-monthly 2026-06
-```
-
-## Changelog
-
-Xem cuối `SKILL.md` cho lịch sử thay đổi (bỏ cross-check, thêm nguyên tắc không placeholder, 5 tab, etc.).
+Kích hoạt: `/vn-macro-monthly <tháng> <năm>`. Changelog chi tiết ở cuối `SKILL.md`.
 
 ## License
 
